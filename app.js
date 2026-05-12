@@ -10,31 +10,29 @@ const API_URL = "https://campusdrop-production.up.railway.app";
 // ─────────────────────────────────────────────────────────────
 const ICE_CONFIG = {
   iceServers: [
-    // STUN Google gratuit (connexions directes P2P)
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-
-    // TURN UDP — réseaux normaux
     {
-      urls: "turn:free.expressturn.com:3478?transport=udp",
-      username: "000000002092863896",
-      credential: "1hGVbVDR9s2iIJpW0kzOogi4R6Y="
+      urls: "stun:stun.relay.metered.ca:80",
     },
-
-    // TURN TCP — si UDP bloqué
     {
-      urls: "turn:free.expressturn.com:3478?transport=tcp",
-      username: "000000002092863896",
-      credential: "1hGVbVDR9s2iIJpW0kzOogi4R6Y="
+      urls: "turn:global.relay.metered.ca:80",
+      username: "dde7549ab1e2cd056205b049",
+      credential: "0M6o/InPR00YH1TO",
     },
-
-    // TURN TLS port 443 — passe partout (universités, entreprises)
-    // C'est ce mode qui résout le problème des réseaux restrictifs
     {
-      urls: "turns:free.expressturn.com:443?transport=tcp",
-      username: "000000002092863896",
-      credential: "1hGVbVDR9s2iIJpW0kzOogi4R6Y="
-    }
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      username: "dde7549ab1e2cd056205b049",
+      credential: "0M6o/InPR00YH1TO",
+    },
+    {
+      urls: "turn:global.relay.metered.ca:443",
+      username: "dde7549ab1e2cd056205b049",
+      credential: "0M6o/InPR00YH1TO",
+    },
+    {
+      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      username: "dde7549ab1e2cd056205b049",
+      credential: "0M6o/InPR00YH1TO",
+    },
   ],
   iceCandidatePoolSize: 10
 };
