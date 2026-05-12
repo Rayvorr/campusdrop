@@ -11,7 +11,7 @@ const API_URL = "https://campusdrop-production.up.railway.app";
 const ICE_CONFIG = {
   iceServers: [
     {
-      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
       username: "dde7549ab1e2cd056205b049",
       credential: "0M6o/InPR00YH1TO",
     }
