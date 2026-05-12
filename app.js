@@ -86,7 +86,7 @@ function startPeer(initiator) {
   isInitiator = initiator;
   peer = new SimplePeer({
     initiator,
-    trickle: true,
+    trickle: false,
     config: ICE_CONFIG
   });
 
