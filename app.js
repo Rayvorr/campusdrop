@@ -97,26 +97,40 @@ function startPeer(initiator) {
     document.getElementById("setupZone").style.display = "none";
     document.getElementById("transferZone").style.display = "block";
     showToast("Connexion P2P établie !", "success");
-
-    if (peer._pc) {
-      peer._pc.getStats().then(stats => {
-        stats.forEach(report => {
-          if (report.type === "candidate-pair" && report.state === "succeeded") {
-            const isRelay = [...stats.values()].find(s =>
-              s.id === report.remoteCandidateId && s.candidateType === "relay"
-            );
-            updateConnectionBadge(isRelay ? "relay" : "direct");
-          }
-        });
-      });
-    }
+    console.log("[P2P] connect");
   });
 
-  peer.on("data", handleIncomingData);
-  peer.on("error", (err) => { console.error(err); showToast("Erreur de connexion P2P", "error"); resetTransferUI(); });
-  peer.on("close", resetTransferUI);
-}
+  if (peer._pc) {
+    peer._pc.addEventListener("iceconnectionstatechange", () => {
+      console.log("[ICE] state =", peer._pc.iceConnectionState);
+    });
 
+    peer._pc.addEventListener("connectionstatechange", () => {
+      console.log("[PC] state =", peer._pc.connectionState);
+    });
+
+    peer._pc.addEventListener("icegatheringstatechange", () => {
+      console.log("[ICE] gathering =", peer._pc.iceGatheringState);
+    });
+
+    peer._pc.addEventListener("icecandidateerror", (e) => {
+      console.error("[ICE] candidate error", e);
+    });
+  }
+
+  peer.on("data", handleIncomingData);
+
+  peer.on("error", (err) => {
+    console.error("[P2P] simple-peer error =", err);
+    showToast("Erreur de connexion P2P", "error");
+    resetTransferUI();
+  });
+
+  peer.on("close", () => {
+    console.warn("[P2P] close");
+    resetTransferUI();
+  });
+}
 function updateConnectionBadge(mode) {
   const label = document.getElementById("connectionLabel");
   const dot = document.querySelector(".dot.connected");
