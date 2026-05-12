@@ -1,5 +1,5 @@
 // ── Config ──────────────────────────────────────────────────────
-const API_URL = "https://campusdrop-production.up.railway.app/";
+const API_URL = "https://campusdrop-production.up.railway.app";
 
 // ─────────────────────────────────────────────────────────────
 // TURN : remplace les 3 placeholders ci-dessous par les valeurs
