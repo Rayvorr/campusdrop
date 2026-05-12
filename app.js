@@ -31,7 +31,7 @@ const ICE_CONFIG = {
     // TURN TLS port 443 — passe partout (universités, entreprises)
     // C'est ce mode qui résout le problème des réseaux restrictifs
     {
-      urls: "turn:free.expressturn.com:3478?transport=tcp",
+      urls: "turn:free.expressturn.com:443?transport=tcp",
       username: "000000002092863896",
       credential: "1hGVbVDR9s2iIJpW0kzOogi4R6Y="
     }
