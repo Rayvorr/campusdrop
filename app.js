@@ -1,427 +1,343 @@
-// ── Config ──────────────────────────────────────────────────────
-const API_URL = "https://campusdrop-production.up.railway.app";
+const API_URL = window.location.origin;
 
-// ─────────────────────────────────────────────────────────────
-// TURN : remplace les 3 placeholders ci-dessous par les valeurs
-// obtenues sur https://www.expressturn.com après inscription.
-// EXPRESSTURN_HOST     → ex: "xxxx.turn.expressturn.com"
-// EXPRESSTURN_USERNAME → ex: "efXXXXXXXXXXXXXX"
-// EXPRESSTURN_CREDENTIAL → ex: "xxxxxxxxxxxxxxxx"
-// ─────────────────────────────────────────────────────────────
-const ICE_CONFIG = {
-  iceServers: [
-    {
-      urls: "stun:stun.relay.metered.ca:80",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:80",
-      username: "2d79eb6cb9557871cd235fdf",
-      credential: "8BaIlBRTcFY707g2",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:80?transport=tcp",
-      username: "2d79eb6cb9557871cd235fdf",
-      credential: "8BaIlBRTcFY707g2",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:443",
-      username: "2d79eb6cb9557871cd235fdf",
-      credential: "8BaIlBRTcFY707g2",
-    },
-    {
-      urls: "turns:global.relay.metered.ca:443?transport=tcp",
-      username: "2d79eb6cb9557871cd235fdf",
-      credential: "8BaIlBRTcFY707g2",
-    },
-  ],
-  iceCandidatePoolSize: 10
+let selectedFiles = [];
+let currentShare = null;
+
+const el = {
+  usernameDisplay: document.getElementById("usernameDisplay"),
+  setupZone: document.getElementById("setupZone"),
+  waitingZone: document.getElementById("waitingZone"),
+  transferZone: document.getElementById("transferZone"),
+  createBtn: document.getElementById("createBtn"),
+  joinBtn: document.getElementById("joinBtn"),
+  joinCode: document.getElementById("joinCode"),
+  fileInput: document.getElementById("fileInput"),
+  dropZone: document.getElementById("dropZone"),
+  sendList: document.getElementById("sendList"),
+  receiveList: document.getElementById("receiveList"),
+  createdFilesList: document.getElementById("createdFilesList"),
+  uploadProgress: document.getElementById("uploadProgress"),
+  uploadBar: document.getElementById("uploadBar"),
+  uploadLabel: document.getElementById("uploadLabel"),
+  codeText: document.getElementById("codeText"),
+  shareLink: document.getElementById("shareLink"),
+  expiresAtText: document.getElementById("expiresAtText"),
+  shareCodeLabel: document.getElementById("shareCodeLabel"),
+  shareExpiryLine: document.getElementById("shareExpiryLine"),
+  expiryBadge: document.getElementById("expiryBadge"),
+  toast: document.getElementById("toast")
 };
 
-// ── Pseudo anonyme ────────────────────────────────────────────────
-const adjectives = ["Swift","Bold","Bright","Rapid","Sharp","Silent","Wild","Iron","Calm","Dark"];
-const animals = ["Fox","Wolf","Hawk","Bear","Lynx","Raven","Tiger","Falcon","Otter","Viper"];
-const username = adjectives[Math.floor(Math.random()*10)] + animals[Math.floor(Math.random()*10)] + Math.floor(Math.random()*90+10);
+el.usernameDisplay.textContent = "Stockage temporaire";
 
-document.getElementById("usernameDisplay").textContent = username;
-
-// ── Socket.IO ────────────────────────────────────────────────────
-const socket = io(API_URL);
-
-// ── État ─────────────────────────────────────────────────────────
-let peer = null;
-let currentCode = null;
-let peerSocketId = null;
-let isInitiator = false;
-let receiveBuffers = [];
-let receiveSize = 0;
-let receiveMeta = null;
-
-// ── Signaling ────────────────────────────────────────────────────
-socket.on("room-info", ({ peers }) => {
-  if (peers.length > 0) {
-    peerSocketId = peers[0].id;
-    document.getElementById("peerName").textContent = peers[0].username;
-    startPeer(false);
-  }
-});
-
-socket.on("peer-joined", ({ peerId, username: peerUsername }) => {
-  peerSocketId = peerId;
-  document.getElementById("peerName").textContent = peerUsername;
-  startPeer(true);
-});
-
-socket.on("peer-left", () => {
-  showToast("L'autre utilisateur a quitté la session", "info");
-  resetTransferUI();
-});
-
-socket.on("signal", ({ from, data }) => {
-  peerSocketId = from;
-  if (peer) peer.signal(data);
-});
-
-// ── SimplePeer ───────────────────────────────────────────────────
-function startPeer(initiator) {
-  isInitiator = initiator;
-  peer = new SimplePeer({
-    initiator,
-    trickle: false,
-    config: ICE_CONFIG
-  });
-
-  peer.on("signal", (data) => socket.emit("signal", { to: peerSocketId, data }));
-
-  peer.on("connect", () => {
-    document.getElementById("waitingZone").style.display = "none";
-    document.getElementById("setupZone").style.display = "none";
-    document.getElementById("transferZone").style.display = "block";
-    showToast("Connexion P2P établie !", "success");
-    console.log("[P2P] connect");
-  });
-
-  if (peer._pc) {
-    peer._pc.addEventListener("iceconnectionstatechange", () => {
-      console.log("[ICE] state =", peer._pc.iceConnectionState);
-    });
-
-    peer._pc.addEventListener("connectionstatechange", () => {
-      console.log("[PC] state =", peer._pc.connectionState);
-    });
-
-    peer._pc.addEventListener("icegatheringstatechange", () => {
-      console.log("[ICE] gathering =", peer._pc.iceGatheringState);
-    });
-
-    peer._pc.addEventListener("icecandidateerror", (e) => {
-      console.error("[ICE] candidate error", e);
-    });
-  }
-
-  peer.on("data", handleIncomingData);
-
-  peer.on("error", (err) => {
-    console.error("[P2P] simple-peer error =", err);
-    showToast("Erreur de connexion P2P", "error");
-    resetTransferUI();
-  });
-
-  peer.on("close", () => {
-    console.warn("[P2P] close");
-    resetTransferUI();
-  });
-}
-function updateConnectionBadge(mode) {
-  const label = document.getElementById("connectionLabel");
-  const dot = document.querySelector(".dot.connected");
-  if (mode === "relay") {
-    if (label) label.textContent = "Connecté via relais TURN (réseau restrictif détecté)";
-    if (dot) dot.style.background = "#ffc850";
-  } else {
-    if (label) label.textContent = "Connexion directe P2P";
-  }
+function fmtSize(bytes) {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} Ko`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} Go`;
 }
 
-// ── Réception ────────────────────────────────────────────────────
-function handleIncomingData(chunk) {
-  if (typeof chunk === "string" || chunk instanceof String) {
-    processMessage(chunk.toString());
+function formatDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "date inconnue";
+  return date.toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function escHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function fileIcon(name, mimeType = "") {
+  if (mimeType.startsWith("image/")) return "IMG";
+  if (mimeType === "application/pdf") return "PDF";
+  if (mimeType.startsWith("video/")) return "VID";
+  if (mimeType.startsWith("audio/")) return "AUD";
+  const ext = String(name).split(".").pop().toLowerCase();
+  const map = {
+    zip: "ZIP", rar: "ZIP", "7z": "ZIP",
+    doc: "DOC", docx: "DOC",
+    xls: "XLS", xlsx: "XLS",
+    ppt: "PPT", pptx: "PPT",
+    txt: "TXT", md: "TXT", csv: "CSV",
+    js: "JS", ts: "TS", html: "HTML", css: "CSS", json: "JSON"
+  };
+  return map[ext] || "FILE";
+}
+
+function showToast(message, type = "info") {
+  el.toast.textContent = message;
+  el.toast.className = `toast show ${type}`;
+  setTimeout(() => {
+    el.toast.className = "toast";
+  }, 3200);
+}
+
+function normalizeCode(value) {
+  return String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function getShareCodeFromUrl() {
+  const match = window.location.pathname.match(/^\/s\/([A-Z0-9]{6})\/?$/i);
+  if (match) return normalizeCode(match[1]);
+  return normalizeCode(new URLSearchParams(window.location.search).get("code"));
+}
+
+function handleSelectedFiles(fileList) {
+  const incoming = Array.from(fileList || []);
+  if (incoming.length === 0) return;
+  selectedFiles = incoming;
+  renderSelectedFiles();
+}
+
+function removeSelectedFile(index) {
+  selectedFiles.splice(index, 1);
+  renderSelectedFiles();
+}
+
+function renderSelectedFiles() {
+  if (selectedFiles.length === 0) {
+    el.sendList.innerHTML = '<p class="hint empty-state">Aucun fichier sélectionné.</p>';
     return;
   }
-  const str = new TextDecoder().decode(chunk);
-  if (str.startsWith("{")) {
-    try { processMessage(str); return; } catch {}
+
+  el.sendList.innerHTML = selectedFiles.map((file, index) => `
+    <div class="file-item">
+      <span class="fi-icon">${fileIcon(file.name, file.type)}</span>
+      <div class="fi-info">
+        <div class="fi-name">${escHtml(file.name)}</div>
+        <div class="fi-size">${fmtSize(file.size)}</div>
+      </div>
+      <div class="fi-actions">
+        <button class="btn-preview" type="button" onclick="removeSelectedFile(${index})">Retirer</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderShareFiles(container, files, withDownload, code) {
+  if (!files || files.length === 0) {
+    container.innerHTML = '<p class="hint empty-state">Aucun fichier disponible.</p>';
+    return;
   }
-  if (!receiveMeta) return;
-  receiveBuffers.push(chunk);
-  receiveSize += chunk.byteLength || chunk.length;
-  updateReceiveProgress(receiveSize / receiveMeta.size);
-  if (receiveSize >= receiveMeta.size) {
-    const blob = new Blob(receiveBuffers, { type: receiveMeta.type || "application/octet-stream" });
-    addReceivedFile(receiveMeta.name, receiveMeta.size, blob, receiveMeta.type);
-    receiveBuffers = []; receiveSize = 0; receiveMeta = null;
-  }
+
+  container.innerHTML = files.map(file => {
+    const downloadUrl = `${API_URL}${file.downloadUrl}`;
+    const action = withDownload
+      ? `<a class="btn-dl" href="${downloadUrl}">Télécharger</a>`
+      : "";
+
+    return `
+      <div class="file-item">
+        <span class="fi-icon">${fileIcon(file.name, file.mimeType)}</span>
+        <div class="fi-info">
+          <div class="fi-name">${escHtml(file.name)}</div>
+          <div class="fi-size">${fmtSize(file.size)}</div>
+        </div>
+        <div class="fi-actions">${action}</div>
+      </div>
+    `;
+  }).join("");
 }
 
-function processMessage(str) {
-  const msg = JSON.parse(str);
-  if (msg.type === "file-start") {
-    receiveMeta = { name: msg.name, size: msg.size, type: msg.mimeType };
-    receiveBuffers = []; receiveSize = 0;
-    addReceiveProgressItem(msg.name, msg.size);
-  }
+function setUploadProgress(percent, label) {
+  el.uploadProgress.style.display = "block";
+  el.uploadBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  el.uploadLabel.textContent = label;
 }
 
-// ── Envoi ────────────────────────────────────────────────────────
-const CHUNK = 64 * 1024;
+function uploadFiles(files) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append("files", file));
 
-async function sendFiles(files) {
-  if (!peer || !peer.connected) return showToast("Non connecté", "error");
-  for (const file of files) await sendFile(file);
-}
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/api/shares`);
 
-async function sendFile(file) {
-  const itemId = addSendItem(file.name, file.size);
-  peer.send(JSON.stringify({ type: "file-start", name: file.name, size: file.size, mimeType: file.type }));
-  let offset = 0;
-  while (offset < file.size) {
-    const buffer = await file.slice(offset, offset + CHUNK).arrayBuffer();
-    await new Promise(resolve => {
-      const wait = () => {
-        if (peer._channel && peer._channel.bufferedAmount > CHUNK * 8) setTimeout(wait, 50);
-        else resolve();
-      };
-      wait();
-    });
-    peer.send(buffer);
-    offset += buffer.byteLength;
-    updateSendProgress(itemId, offset / file.size);
-  }
-}
-
-// ── Icône par type ────────────────────────────────────────────────
-function fileIcon(name, mime) {
-  if (mime && mime.startsWith("image/")) return "🖼️";
-  if (mime === "application/pdf") return "📕";
-  if (mime && mime.startsWith("text/")) return "📝";
-  if (mime && mime.startsWith("video/")) return "🎬";
-  if (mime && mime.startsWith("audio/")) return "🎵";
-  const ext = name.split(".").pop().toLowerCase();
-  const map = { zip:"🗜️", rar:"🗜️", "7z":"🗜️", doc:"📘", docx:"📘", xls:"📗", xlsx:"📗", ppt:"📙", pptx:"📙", js:"💻", ts:"💻", py:"💻", html:"💻", css:"💻", json:"💻" };
-  return map[ext] || "📄";
-}
-
-// ── Prévisualisation ──────────────────────────────────────────────
-function canPreview(name, mime) {
-  if (!mime) return false;
-  if (mime.startsWith("image/")) return true;
-  if (mime.startsWith("text/")) return true;
-  if (mime === "application/pdf") return true;
-  if (mime === "application/json") return true;
-  return false;
-}
-
-function openPreview(name, mime, blob) {
-  const bg = document.getElementById("previewBg");
-  const body = document.getElementById("previewBody");
-  document.getElementById("previewFilename").textContent = name;
-  body.innerHTML = "";
-
-  const url = URL.createObjectURL(blob);
-
-  if (mime.startsWith("image/")) {
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = name;
-    body.appendChild(img);
-  } else if (mime === "application/pdf") {
-    const iframe = document.createElement("iframe");
-    iframe.src = url;
-    iframe.title = name;
-    body.appendChild(iframe);
-  } else if (mime.startsWith("text/") || mime === "application/json") {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const pre = document.createElement("pre");
-      pre.textContent = e.target.result;
-      body.appendChild(pre);
+    xhr.upload.onprogress = event => {
+      if (!event.lengthComputable) {
+        setUploadProgress(20, "Envoi en cours…");
+        return;
+      }
+      const percent = Math.round((event.loaded / event.total) * 100);
+      setUploadProgress(percent, `Envoi ${percent}%`);
     };
-    reader.readAsText(blob);
-  } else {
-    body.innerHTML = `<div class="preview-unsupported"><div class="big">🚫</div><p>Prévisualisation non disponible pour ce type de fichier</p></div>`;
-  }
 
-  bg.style.display = "flex";
-  document.body.style.overflow = "hidden";
-}
-
-function closePreview(e) {
-  if (e && e.target !== document.getElementById("previewBg") && !e.target.classList.contains("preview-close")) return;
-  document.getElementById("previewBg").style.display = "none";
-  document.getElementById("previewBody").innerHTML = "";
-  document.body.style.overflow = "";
-}
-
-// ── UI helpers ────────────────────────────────────────────────────
-function fmtSize(b) {
-  if (b < 1024) return b + " o";
-  if (b < 1048576) return (b / 1024).toFixed(1) + " Ko";
-  return (b / 1048576).toFixed(1) + " Mo";
-}
-
-function escHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
-function addSendItem(name, size) {
-  const id = "s-" + Date.now();
-  const el = document.createElement("div");
-  el.className = "file-item";
-  el.id = id;
-  el.innerHTML = `<span class="fi-icon">📤</span><div class="fi-info"><div class="fi-name">${escHtml(name)}</div><div class="fi-size">${fmtSize(size)}</div><div class="fi-bar-wrap"><div class="fi-bar" style="width:0%"></div></div></div>`;
-  document.getElementById("sendList").appendChild(el);
-  return id;
-}
-
-function updateSendProgress(id, ratio) {
-  const bar = document.querySelector(`#${id} .fi-bar`);
-  if (bar) bar.style.width = Math.round(ratio * 100) + "%";
-}
-
-let currentReceiveItemId = null;
-let currentReceiveBlob = null;
-
-function addReceiveProgressItem(name, size) {
-  const el = document.querySelector("#receiveList .hint");
-  if (el) el.remove();
-  const id = "r-" + Date.now();
-  currentReceiveItemId = id;
-  const div = document.createElement("div");
-  div.className = "file-item";
-  div.id = id;
-  div.innerHTML = `<span class="fi-icon">⬇️</span><div class="fi-info"><div class="fi-name">${escHtml(name)}</div><div class="fi-size">${fmtSize(size)}</div><div class="fi-bar-wrap"><div class="fi-bar" style="width:0%"></div></div></div>`;
-  document.getElementById("receiveList").appendChild(div);
-}
-
-function updateReceiveProgress(ratio) {
-  if (!currentReceiveItemId) return;
-  const bar = document.querySelector(`#${currentReceiveItemId} .fi-bar`);
-  if (bar) bar.style.width = Math.round(ratio * 100) + "%";
-}
-
-function addReceivedFile(name, size, blob, mime) {
-  if (currentReceiveItemId) {
-    const item = document.getElementById(currentReceiveItemId);
-    if (item) {
-      updateReceiveProgress(1);
-
-      const icon = item.querySelector(".fi-icon");
-      if (icon) icon.textContent = fileIcon(name, mime);
-
-      const actions = document.createElement("div");
-      actions.className = "fi-actions";
-
-      if (canPreview(name, mime)) {
-        const prevBtn = document.createElement("button");
-        prevBtn.className = "btn-preview";
-        prevBtn.textContent = "👁 Voir";
-        prevBtn.onclick = () => openPreview(name, mime, blob);
-        actions.appendChild(prevBtn);
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = {};
       }
 
-      const link = document.createElement("a");
-      link.className = "btn-dl";
-      link.textContent = "⬇ Télécharger";
-      link.href = URL.createObjectURL(blob);
-      link.download = name;
-      actions.appendChild(link);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data.error || "Upload impossible."));
+      }
+    };
 
-      item.appendChild(actions);
-    }
-  }
-  showToast(`Fichier reçu : ${name}`, "success");
-  currentReceiveItemId = null;
+    xhr.onerror = () => reject(new Error("Connexion au serveur impossible."));
+    xhr.send(formData);
+  });
 }
 
-// ── Actions ──────────────────────────────────────────────────────
-document.getElementById("createBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("createBtn");
-  btn.disabled = true;
-  btn.textContent = "...";
-  try {
-    const res = await fetch(API_URL + "/api/sessions", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    currentCode = data.code;
-    document.getElementById("codeText").textContent = data.code;
-    document.getElementById("codeDisplay").style.display = "block";
-    document.getElementById("waitCode").textContent = data.code;
-    document.getElementById("setupZone").style.display = "none";
-    document.getElementById("waitingZone").style.display = "block";
-    socket.emit("join-session", { code: data.code, username });
-  } catch (err) {
-    showToast(err.message || "Erreur", "error");
-    btn.disabled = false;
-    btn.textContent = "Créer";
+async function createShare() {
+  if (selectedFiles.length === 0) {
+    showToast("Choisissez au moins un fichier.", "error");
+    return;
   }
-});
 
-document.getElementById("joinBtn").addEventListener("click", async () => {
-  const code = document.getElementById("joinCode").value.trim().toUpperCase();
-  if (code.length !== 6) return showToast("Le code doit faire 6 caractères", "error");
+  el.createBtn.disabled = true;
+  el.createBtn.textContent = "Envoi…";
+  setUploadProgress(0, "Préparation de l'envoi…");
+
   try {
-    const res = await fetch(API_URL + "/api/sessions/join", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    currentCode = code;
-    document.getElementById("setupZone").style.display = "none";
-    document.getElementById("waitingZone").style.display = "block";
-    document.getElementById("waitCode").textContent = code;
-    socket.emit("join-session", { code, username });
+    const share = await uploadFiles(selectedFiles);
+    currentShare = share;
+    showCreatedShare(share);
+    showToast("Partage créé.", "success");
   } catch (err) {
-    showToast(err.message || "Session introuvable", "error");
+    showToast(err.message || "Erreur pendant l'envoi.", "error");
+  } finally {
+    el.createBtn.disabled = false;
+    el.createBtn.textContent = "Créer le partage";
   }
-});
+}
 
-// Rejoindre avec Entrée sur mobile
-document.getElementById("joinCode").addEventListener("keydown", e => {
-  if (e.key === "Enter") document.getElementById("joinBtn").click();
-});
+function showCreatedShare(share) {
+  el.setupZone.style.display = "none";
+  el.transferZone.style.display = "none";
+  el.waitingZone.style.display = "block";
 
-// Drag & Drop
-const dropZone = document.getElementById("dropZone");
-dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("over"); });
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("over"));
-dropZone.addEventListener("drop", e => { e.preventDefault(); dropZone.classList.remove("over"); sendFiles(e.dataTransfer.files); });
+  el.codeText.textContent = share.code;
+  el.shareLink.value = share.shareUrl;
+  el.expiresAtText.textContent = formatDate(share.expiresAt);
+  el.expiryBadge.textContent = `Expire le ${formatDate(share.expiresAt)}`;
+  renderShareFiles(el.createdFilesList, share.files, false, share.code);
 
-// Fermer preview avec Echap
-document.addEventListener("keydown", e => { if (e.key === "Escape") closePreview({}); });
+  if (history.pushState) {
+    history.pushState(null, "", `/s/${share.code}`);
+  }
+}
+
+async function openShareByCode(code, updateUrl = true) {
+  const normalizedCode = normalizeCode(code);
+  if (normalizedCode.length !== 6) {
+    showToast("Le code doit contenir 6 caractères.", "error");
+    return;
+  }
+
+  el.joinBtn.disabled = true;
+  el.joinBtn.textContent = "Ouverture…";
+
+  try {
+    const res = await fetch(`${API_URL}/api/shares/${normalizedCode}`);
+    const share = await res.json();
+    if (!res.ok) throw new Error(share.error || "Partage introuvable.");
+    currentShare = share;
+    showShareDownloadView(share);
+    if (updateUrl && history.pushState) history.pushState(null, "", `/s/${share.code}`);
+  } catch (err) {
+    showToast(err.message || "Code invalide ou expiré.", "error");
+  } finally {
+    el.joinBtn.disabled = false;
+    el.joinBtn.textContent = "Ouvrir";
+  }
+}
+
+function showShareDownloadView(share) {
+  el.setupZone.style.display = "none";
+  el.waitingZone.style.display = "none";
+  el.transferZone.style.display = "block";
+
+  el.shareCodeLabel.textContent = share.code;
+  el.shareExpiryLine.innerHTML = `Disponible jusqu'au <strong class="inline-code">${formatDate(share.expiresAt)}</strong>.`;
+  el.expiryBadge.textContent = `Expire le ${formatDate(share.expiresAt)}`;
+  renderShareFiles(el.receiveList, share.files, true, share.code);
+}
+
+async function copyText(value, successMessage) {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    showToast(successMessage, "success");
+  } catch {
+    const input = document.createElement("input");
+    input.value = value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+    showToast(successMessage, "success");
+  }
+}
 
 function copyCode() {
-  if (currentCode) navigator.clipboard.writeText(currentCode).then(() => showToast("Code copié !", "success"));
+  copyText(currentShare?.code || el.codeText.textContent, "Code copié.");
 }
 
-function resetTransferUI() {
-  document.getElementById("transferZone").style.display = "none";
-  document.getElementById("waitingZone").style.display = "none";
-  document.getElementById("setupZone").style.display = "block";
-  document.getElementById("codeDisplay").style.display = "none";
-  document.getElementById("createBtn").disabled = false;
-  document.getElementById("createBtn").textContent = "Créer";
-  document.getElementById("sendList").innerHTML = "";
-  document.getElementById("receiveList").innerHTML = '<p class="hint" style="text-align:center;padding:20px">En attente de fichiers…</p>';
-  peer = null; currentCode = null; peerSocketId = null;
+function copyShareLink() {
+  copyText(el.shareLink.value, "Lien copié.");
 }
 
-function disconnect() { if (peer) peer.destroy(); resetTransferUI(); }
+function resetUI() {
+  currentShare = null;
+  selectedFiles = [];
+  el.fileInput.value = "";
+  el.setupZone.style.display = "block";
+  el.waitingZone.style.display = "none";
+  el.transferZone.style.display = "none";
+  el.uploadProgress.style.display = "none";
+  el.uploadBar.style.width = "0%";
+  el.uploadLabel.textContent = "Préparation de l'envoi…";
+  el.joinCode.value = "";
+  el.expiryBadge.textContent = "Expire automatiquement";
+  renderSelectedFiles();
+  if (history.pushState) history.pushState(null, "", "/");
+}
 
-function showToast(msg, type = "info") {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.className = "toast show " + type;
-  setTimeout(() => t.className = "toast", 3000);
+el.createBtn.addEventListener("click", createShare);
+
+el.joinBtn.addEventListener("click", () => {
+  openShareByCode(el.joinCode.value);
+});
+
+el.joinCode.addEventListener("keydown", event => {
+  if (event.key === "Enter") el.joinBtn.click();
+});
+
+el.dropZone.addEventListener("dragover", event => {
+  event.preventDefault();
+  el.dropZone.classList.add("over");
+});
+
+el.dropZone.addEventListener("dragleave", () => {
+  el.dropZone.classList.remove("over");
+});
+
+el.dropZone.addEventListener("drop", event => {
+  event.preventDefault();
+  el.dropZone.classList.remove("over");
+  handleSelectedFiles(event.dataTransfer.files);
+});
+
+window.addEventListener("popstate", () => {
+  const code = getShareCodeFromUrl();
+  if (code) openShareByCode(code, false);
+  else resetUI();
+});
+
+renderSelectedFiles();
+
+const initialCode = getShareCodeFromUrl();
+if (initialCode) {
+  el.joinCode.value = initialCode;
+  openShareByCode(initialCode, false);
 }

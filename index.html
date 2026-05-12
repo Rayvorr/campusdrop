@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>CampusDrop - Partage P2P</title>
-  <link rel="stylesheet" href="style.css">
+  <title>CampusDrop - Transfert de fichiers</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
@@ -14,8 +14,8 @@
     <span>CampusDrop</span>
   </span>
   <div class="topbar-right">
-    <span class="network-chip">P2P</span>
-    <span id="usernameDisplay" class="pseudo-badge"></span>
+    <span class="network-chip">Sans compte</span>
+    <span id="usernameDisplay" class="pseudo-badge">Partage temporaire</span>
   </div>
 </header>
 
@@ -23,87 +23,88 @@
 <section class="card">
   <div class="panel-header">
     <div>
-      <p class="eyebrow">Transfert campus</p>
+      <p class="eyebrow">Transfert sécurisé</p>
       <h1>CampusDrop</h1>
     </div>
-    <span class="session-pill">Session privée</span>
+    <span class="session-pill" id="expiryBadge">Expire automatiquement</span>
   </div>
 
-  <!-- Setup -->
+  <!-- Création + consultation -->
   <div id="setupZone">
-    <h2>Démarrer un partage</h2>
+    <h2>Envoyer ou récupérer des fichiers</h2>
     <div class="actions-row">
       <div class="action-box">
-        <p class="action-title"><span class="action-icon action-create" aria-hidden="true"></span>Créer une session</p>
-        <p class="action-desc">Générez un code et partagez-le</p>
-        <button id="createBtn">Créer</button>
-        <div id="codeDisplay" style="display:none">
-          <div class="code-badge" id="codeText" onclick="copyCode()" title="Cliquer pour copier"></div>
-          <p class="hint code-hint">Appuyez sur le code pour copier</p>
-        </div>
-      </div>
-      <div class="separator">ou</div>
-      <div class="action-box">
-        <p class="action-title"><span class="action-icon action-join" aria-hidden="true"></span>Rejoindre une session</p>
-        <p class="action-desc">Entrez le code à 6 caractères</p>
-        <div class="join-row">
-          <input id="joinCode" class="join-code-input" maxlength="6" placeholder="ABC123">
-          <button id="joinBtn">Rejoindre</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Attente -->
-  <div id="waitingZone" style="display:none">
-    <div class="status-line">
-      <span class="dot waiting"></span>
-      <span>En attente d'un second utilisateur…</span>
-    </div>
-    <p class="hint">Partagez le code <strong id="waitCode" class="inline-code"></strong> avec votre destinataire</p>
-  </div>
-
-  <!-- Transfert -->
-  <div id="transferZone" style="display:none">
-    <div class="status-line">
-      <span class="dot connected"></span>
-      <span id="connectionLabel">Connexion avec <strong id="peerName"></strong></span>
-      <button class="btn-small danger leave-btn" onclick="disconnect()">Quitter</button>
-    </div>
-
-    <div class="transfer-grid">
-      <div>
-        <h3><span class="section-icon section-send" aria-hidden="true"></span>Envoyer</h3>
+        <p class="action-title"><span class="action-icon action-create" aria-hidden="true"></span>Créer un partage</p>
+        <p class="action-desc">Ajoutez vos fichiers, puis générez un lien à partager</p>
         <div id="dropZone" class="drop-zone" onclick="document.getElementById('fileInput').click()">
-          <input type="file" id="fileInput" multiple style="display:none" onchange="sendFiles(this.files)">
+          <input type="file" id="fileInput" multiple style="display:none" onchange="handleSelectedFiles(this.files)">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <p>Glissez vos fichiers ici<br><small>ou appuyez pour choisir</small></p>
         </div>
         <div id="sendList"></div>
+        <button id="createBtn">Créer le partage</button>
+        <div id="uploadProgress" class="upload-progress" style="display:none">
+          <div class="fi-bar-wrap"><div class="fi-bar" id="uploadBar" style="width:0%"></div></div>
+          <p class="hint" id="uploadLabel">Préparation de l'envoi…</p>
+        </div>
       </div>
+      <div class="separator">ou</div>
+      <div class="action-box">
+        <p class="action-title"><span class="action-icon action-join" aria-hidden="true"></span>Ouvrir un partage</p>
+        <p class="action-desc">Entrez le code reçu pour voir les fichiers disponibles</p>
+        <div class="join-row">
+          <input id="joinCode" class="join-code-input" maxlength="6" placeholder="ABC123">
+          <button id="joinBtn">Ouvrir</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
+  <!-- Résultat après upload -->
+  <div id="waitingZone" style="display:none">
+    <div class="status-line">
+      <span class="dot connected"></span>
+      <span>Partage prêt</span>
+      <button class="btn-small btn-secondary leave-btn" onclick="resetUI()">Nouveau partage</button>
+    </div>
+    <div class="share-result">
       <div>
-        <h3><span class="section-icon section-receive" aria-hidden="true"></span>Reçus</h3>
-        <div id="receiveList"><p class="hint" style="text-align:center;padding:20px">En attente de fichiers…</p></div>
+        <p class="hint">Code à partager</p>
+        <div class="code-badge" id="codeText" onclick="copyCode()" title="Cliquer pour copier"></div>
+      </div>
+      <div>
+        <p class="hint">Lien direct</p>
+        <div class="share-link-row">
+          <input id="shareLink" readonly>
+          <button id="copyLinkBtn" class="btn-small" onclick="copyShareLink()">Copier</button>
+        </div>
+      </div>
+      <p class="hint">Ce partage expire le <strong id="expiresAtText" class="inline-code"></strong>.</p>
+      <div id="createdFilesList"></div>
+    </div>
+  </div>
+
+  <!-- Consultation / téléchargement -->
+  <div id="transferZone" style="display:none">
+    <div class="status-line">
+      <span class="dot connected"></span>
+      <span id="connectionLabel">Partage <strong id="shareCodeLabel"></strong></span>
+      <button class="btn-small danger leave-btn" onclick="resetUI()">Fermer</button>
+    </div>
+
+    <div class="transfer-grid single-column">
+      <div>
+        <h3><span class="section-icon section-receive" aria-hidden="true"></span>Fichiers disponibles</h3>
+        <p class="hint share-expiry-line" id="shareExpiryLine"></p>
+        <div id="receiveList"><p class="hint empty-state">Entrez un code ou ouvrez un lien de partage.</p></div>
       </div>
     </div>
   </div>
 </section>
 </main>
 
-<!-- Prévisualisation -->
-<div id="previewBg" class="preview-bg" style="display:none" onclick="closePreview(event)">
-  <div class="preview-header">
-    <span class="preview-filename" id="previewFilename"></span>
-    <button class="preview-close" onclick="closePreview()">✕ Fermer</button>
-  </div>
-  <div class="preview-body" id="previewBody"></div>
-</div>
-
 <div id="toast"></div>
 
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script src="https://unpkg.com/simple-peer@9/simplepeer.min.js"></script>
-<script src="app.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>

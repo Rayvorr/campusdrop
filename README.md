@@ -1,38 +1,38 @@
-# CampusDrop — Partage P2P anonyme
+# CampusDrop
+
+CampusDrop est un service simple de transfert de fichiers temporaire, sans compte.
 
 ## Fonctionnement
-- Aucun compte, aucune inscription
-- Pseudo anonyme généré automatiquement à chaque visite
-- Transfert direct entre navigateurs (WebRTC DataChannel)
-- Fallback automatique via TURN si le P2P direct est bloqué
-- Compatible réseaux universitaires et d'entreprise (TURN TLS port 443)
+- Un utilisateur sélectionne un ou plusieurs fichiers.
+- Le serveur reçoit les fichiers et les stocke temporairement dans `uploads/`.
+- Un code court et un lien direct sont générés.
+- Le destinataire ouvre le lien ou saisit le code.
+- Les fichiers sont disponibles au téléchargement jusqu'à expiration.
+- Un nettoyage automatique supprime les partages expirés.
 
 ## Stack
-Backend : Node.js + Express + Socket.IO (signaling uniquement)
-Frontend : HTML/CSS/JS vanilla + SimplePeer
-TURN : ExpressTURN (cloud géré, port 443 TLS)
+- Backend : Node.js + Express
+- Upload : Multer
+- Frontend : HTML/CSS/JS vanilla
 
 ## Démarrage local
-```
+```bash
 npm install
-node server.js
+npm start
 ```
-→ http://localhost:3000
 
-## Déploiement Railway
-- Variables d'env : PORT (auto), FRONTEND_ORIGIN (*)
-- Start command : node server.js
+Puis ouvrir :
+```text
+http://localhost:3000
+```
 
-## Configuration TURN (obligatoire pour les réseaux restrictifs)
-1. Créer un compte gratuit sur https://www.expressturn.com
-2. Récupérer le host, username et credential dans le dashboard
-3. Dans `app.js`, remplacer les 3 placeholders :
-   - `EXPRESSTURN_HOST`
-   - `EXPRESSTURN_USERNAME`
-   - `EXPRESSTURN_CREDENTIAL`
+Le dossier `uploads/` est créé automatiquement au démarrage et reste ignoré par Git.
 
-## Pourquoi ça marche sur les réseaux universitaires
-Le mode `turns:HOST:443?transport=tcp` fait transiter les données
-WebRTC sur le port 443 en TLS, indiscernable du trafic HTTPS normal.
-Les firewalls universitaires ne peuvent pas le bloquer sans couper
-l'accès à tous les sites web en HTTPS.
+## Variables utiles
+- `PORT` : port du serveur, fourni automatiquement par Railway
+- `PUBLIC_BASE_URL` : URL publique utilisée dans les liens de partage
+- `SHARE_TTL_HOURS` : durée de vie des partages, 24 par défaut
+- `UPLOAD_DIR` : dossier de stockage temporaire
+- `MAX_FILES` : nombre maximum de fichiers par partage, 10 par défaut
+- `MAX_FILE_SIZE_MB` : taille max par fichier, 250 Mo par défaut
+- `MAX_TOTAL_SIZE_MB` : taille max totale par partage, 500 Mo par défaut
