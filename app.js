@@ -11,28 +11,10 @@ const API_URL = "https://campusdrop-production.up.railway.app";
 const ICE_CONFIG = {
   iceServers: [
     {
-      urls: "stun:stun.relay.metered.ca:80",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:80",
-      username: "dde7549ab1e2cd056205b049",
-      credential: "0M6o/InPR00YH1TO",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:80?transport=tcp",
-      username: "dde7549ab1e2cd056205b049",
-      credential: "0M6o/InPR00YH1TO",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:443",
-      username: "dde7549ab1e2cd056205b049",
-      credential: "0M6o/InPR00YH1TO",
-    },
-    {
       urls: "turns:global.relay.metered.ca:443?transport=tcp",
       username: "dde7549ab1e2cd056205b049",
       credential: "0M6o/InPR00YH1TO",
-    },
+    }
   ],
   iceCandidatePoolSize: 10
 };
